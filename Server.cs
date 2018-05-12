@@ -6,19 +6,19 @@ using System.Threading.Tasks;
 using MySql.Data.MySqlClient;
 
 
-namespace ConsoleApp1
+namespace GammaServer
 {
     class Server
     {
-        public static Server[] ActiveServers = new Server[500];
+        public static List<Server> ActiveServers = new List<Server>();
         public ushort Port;
         public int Players;
         public const int MaxPlayers = 10;
-        public ushort GamePort = Program.Gameport + 1;
+        public ushort GamePort = (ushort) (Program.GamePort + 1);
         public Server()
         {
             int i = 0;
-            while (i > ActiveServers.Length)
+            while (i > ActiveServers.Count)
             {
                 if (ActiveServers[i] == null)
                 {
