@@ -14,7 +14,7 @@ namespace GammaServer
         public ushort Port;
         public int Players;
         public const int MaxPlayers = 10;
-        public ushort GamePort = (ushort) (Program.Gameport + 1);
+        public ushort GamePort = (ushort) (Program.GamePort + 1);
         public Server()
         {
             int i = 0;

@@ -4,8 +4,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using GammaServer.Properties;
-using Google.Protobuf.WellKnownTypes;
+using static GammaServer.Properties.Properties;
+
 using MySql.Data.MySqlClient;
 
 
@@ -46,42 +46,48 @@ namespace GammaServer
 
 	internal static class Program
 	{
-		public static byte login = 0;
+		public static byte Login = 0;
 		public static bool Listen = true;
 		public static bool GlobalWait = true;
-		public static ushort Gameport = 26565;
+		public const ushort GamePort = 26565;
 
 		//Inter-Server Communications Array
 		//public static Array isc;
-		public static IPAddress Localhost = new IPAddress(0x7f000001); //Hex for 127.0.0.1
+		public static readonly IPAddress Localhost = new IPAddress(0x7f000001); //Hex for 127.0.0.1, don't cast/parse if you can avoid it.
 		public struct Packet
 		{
 			public IPEndPoint EndPoint;
 			public byte[] Data;
 		}
 
-		private static MySqlConnection DB = new MySqlConnection("Server=localhost;Port=3456;Database=GammaServer;uid=ServerAdmin;pwd=iV1zKRay8gVMcsl2");
+		private static readonly MySqlConnection Database = new MySqlConnection(MainDatabase.ToString());
 		private static MySqlCommand sql;
-		private static MySqlConnection _connection = new MySqlConnection();
 		internal static Thread packetSendThread;
 		internal static Socket packetSendSocket;
 		public static Queue<Packet> sendQueue = new Queue<Packet>();
 		static Queue<Packet> recvQueue = new Queue<Packet>();
-		static EndPoint recvEndpoint = (EndPoint)new IPEndPoint(IPAddress.Any, 0);
+		static EndPoint recvEndpoint = new IPEndPoint(IPAddress.Any, 0);
 
 		//Initialize Server, Listen
 		static void Main(string[] args)
 		{
 			Console.WriteLine("Initializing Server");
-			IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, Gameport);
+
+			IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, GamePort);
+
 			packetSendSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 			packetSendSocket.Bind(endpoint);
-			packetSendThread = new Thread(ThreadLoop);
-			packetSendThread.IsBackground = true;
+
+			packetSendThread = new Thread(ThreadLoop)
+			{
+				IsBackground = true
+			};
+
 			packetSendThread.Start();
+
 			try
 			{
-				DB.Open();
+				Database.Open();
 
 			}
 			catch (Exception e)
@@ -92,11 +98,8 @@ namespace GammaServer
 			Console.WriteLine("Server Ready, Awaiting Packets");
 			while (Listen)
 			{
-				IPEndPoint sender = new IPEndPoint(IPAddress.Any, Gameport);
-				EndPoint tmpRemote = sender;
-				byte[] data;
 
-				if (TryRecvData(out sender, out data))
+				if (TryRecvData(out IPEndPoint sender, out byte[] data))
 				{
 					//Sender -> IPAddress:Port of User
 					//Data -> 1kb Byte Array of data send by User
@@ -108,13 +111,13 @@ namespace GammaServer
 		}
 
 		//Locks thread, Checks for new packet, Closes
-		static bool TryRecvData(out IPEndPoint from, out byte[] data)
+		private static bool TryRecvData(out IPEndPoint from, out byte[] data)
 		{
 			lock (recvQueue)
 			{
 				if (recvQueue.Count > 0)
 				{
-					var packet = recvQueue.Dequeue();
+					Packet packet = recvQueue.Dequeue();
 					from = packet.EndPoint;
 					data = packet.Data;
 					return true;
@@ -126,16 +129,16 @@ namespace GammaServer
 		}
 
 		//Packet-Sending Process
-		static void ThreadLoop()
+		private static void ThreadLoop()
 		{
-			var buffer = new byte[1200];
+			byte[] buffer = new byte[1200];
 			while (true)
 			{
 				lock (sendQueue)
 				{
 					while (sendQueue.Count > 0)
 					{
-						var packet = sendQueue.Dequeue();
+						Packet packet = sendQueue.Dequeue();
 						packetSendSocket.SendTo(packet.Data, packet.EndPoint);
 					}
 				}
@@ -157,7 +160,7 @@ namespace GammaServer
 		}
 
 		//Decrypts Packet for further Usage
-		static void DecryptPacket(byte[] data, IPEndPoint sender)
+		private static void DecryptPacket(byte[] data, IPEndPoint sender)
 		{
 			if (data.Length > 2)
 			{
@@ -169,7 +172,7 @@ namespace GammaServer
 						dataLogin.SendData[0] = 0;
 
 						//Replace me with Mysql Check 
-						sql = DB.CreateCommand();
+						sql = Database.CreateCommand();
 						sql.CommandText = "SELECT * FROM Users WHERE username = '" + dataLogin.Username + "' and password = '" + dataLogin.Password + "'";
 						MySqlDataReader reader = sql.ExecuteReader();
 						byte i = 0;
@@ -199,9 +202,9 @@ namespace GammaServer
 						Utils.LoginPair dataRegister = new Utils.LoginPair(data);
 						dataRegister.SendData[0] = 1;
 						//Update Database
-						sql = DB.CreateCommand();
+						sql = Database.CreateCommand();
 						sql.CommandText = "INSERT INTO Users (username, password) VALUES ('" + dataRegister.Username + "', '" + dataRegister.Password + "')";
-						bool Reg = true;
+						bool reg = true;
 						try
 						{
 							MySqlDataReader a = sql.ExecuteReader();
@@ -210,10 +213,10 @@ namespace GammaServer
 						catch
 						{
 							Console.WriteLine(sql.CommandText);
-							Reg = false;
+							reg = false;
 						}
 
-						if (Reg)
+						if (reg)
 						{
 							Console.WriteLine("Registration Successful");
 							dataRegister.SendData[1] = 1;
@@ -257,7 +260,7 @@ namespace GammaServer
 				{
 					//No Servers Found
 					Console.WriteLine("No Servers Found, Creating New Server");
-					new Server();
+					Server.ActiveServers.Add(new Server()); //I presume someone forgot to add the server to the list ?
 					return false;
 				}
 			}
